@@ -47,6 +47,7 @@ interface DatabaseContextValue {
   resetDatabase: () => void;
   // Url sharing stats
   urlByteLength: number;
+  isHydrated: boolean;
 }
 
 const DatabaseContext = createContext<DatabaseContextValue | null>(null);
@@ -57,12 +58,13 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const [futureStack, setFutureStack] = useState<DatabaseState[]>([]);
   const [collision, setCollision] = useState<CollisionState>({ isOpen: false, incomingState: null });
   const [urlByteLength, setUrlByteLength] = useState<number>(0);
+  const [isHydrated, setIsHydrated] = useState<boolean>(false);
 
   const stateRef = useRef(state);
   stateRef.current = state;
 
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isHydratedRef = useRef(false);
+  const hasInitializedRef = useRef(false);
 
   // Helper to commit state with undo stack
   const commitState = useCallback((newState: DatabaseState, pushToHistory = true) => {
@@ -129,8 +131,8 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
 
   // Initial Hydration & Collision detection
   useEffect(() => {
-    if (isHydratedRef.current) return;
-    isHydratedRef.current = true;
+    if (hasInitializedRef.current) return;
+    hasInitializedRef.current = true;
 
     async function init() {
       const currentHash = typeof window !== 'undefined' ? window.location.hash : '';
@@ -179,7 +181,9 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    init();
+    init().finally(() => {
+      setIsHydrated(true);
+    });
 
     // Listen to browser Back/Forward (popstate)
     const handlePopState = async () => {
@@ -583,6 +587,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
         exportStateJson,
         resetDatabase,
         urlByteLength,
+        isHydrated,
       }}
     >
       {children}

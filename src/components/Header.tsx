@@ -31,6 +31,7 @@ export function Header() {
     importState,
     resetDatabase,
     urlByteLength,
+    isHydrated,
   } = useDatabase();
   const { theme, toggleTheme } = useTheme();
 
@@ -142,8 +143,12 @@ export function Header() {
         >
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
           <span>#hash:</span>
-          <span className="font-semibold text-black dark:text-white">
-            {urlByteLength > 1024 ? `${(urlByteLength / 1024).toFixed(1)} KB` : `${urlByteLength} B`}
+          <span className="font-semibold text-black dark:text-white min-w-[32px] text-right">
+            {isHydrated
+              ? urlByteLength > 1024
+                ? `${(urlByteLength / 1024).toFixed(1)} KB`
+                : `${urlByteLength} B`
+              : '— B'}
           </span>
         </div>
 

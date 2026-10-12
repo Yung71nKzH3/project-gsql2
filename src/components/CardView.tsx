@@ -4,7 +4,8 @@ import React from 'react';
 import { useDatabase } from '../context/DatabaseContext';
 import { RecordRow } from '../types/database';
 import { RelationCell } from './RelationCell';
-import { Plus, Trash2, CheckSquare } from 'lucide-react';
+import { MultiSelectCell } from './MultiSelectCell';
+import { Plus, Trash2, Copy, ExternalLink, Calendar } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface CardViewProps {
@@ -12,14 +13,11 @@ interface CardViewProps {
 }
 
 export function CardView({ filteredRows }: CardViewProps) {
-  const { activeTable, activeView, updateViewConfig, addRow, deleteRow, updateCell } = useDatabase();
+  const { activeTable, addRow, deleteRow, duplicateRow, updateCell } = useDatabase();
 
   const fields = activeTable.fields;
   const primaryField = fields[0];
   const secondaryFields = fields.slice(1);
-
-  // Grouping field configuration
-  const selectOrRelationFields = fields.filter((f) => f.type === 'select' || f.type === 'relation');
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-neutral-50/50 dark:bg-neutral-950/50">
@@ -32,7 +30,7 @@ export function CardView({ filteredRows }: CardViewProps) {
 
         <button
           onClick={() => addRow(activeTable.id)}
-          className="flex items-center space-x-1 font-mono text-xs border border-neutral-300 dark:border-neutral-700 px-2.5 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors"
+          className="flex items-center space-x-1 font-mono text-xs border border-neutral-300 dark:border-neutral-700 px-2.5 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors cursor-pointer"
         >
           <Plus className="w-3 h-3" />
           <span>New Card</span>
@@ -42,24 +40,27 @@ export function CardView({ filteredRows }: CardViewProps) {
       {/* Cards Grid */}
       <div className="flex-1 overflow-y-auto p-6">
         {filteredRows.length === 0 ? (
-          <div className="h-48 flex flex-col items-center justify-center border border-dashed border-neutral-300 dark:border-neutral-700 p-8 text-center">
-            <p className="text-xs font-mono text-neutral-500 mb-3">No records found matching query</p>
+          <div className="h-full flex flex-col items-center justify-center text-neutral-400 space-y-2">
+            <span className="font-mono text-xs">No records found.</span>
             <button
               onClick={() => addRow(activeTable.id)}
-              className="px-3 py-1.5 border border-black dark:border-white bg-black dark:bg-white text-white dark:text-black text-xs font-mono"
+              className="font-mono text-xs underline hover:text-black dark:hover:text-white cursor-pointer"
             >
-              Add First Card
+              Create first card
             </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {filteredRows.map((row) => {
               const titleVal = primaryField ? row[primaryField.id] : '';
+
               return (
                 <motion.div
                   key={row.id}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
+                  layout
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.15 }}
                   className="group bg-white dark:bg-black border border-neutral-200 dark:border-neutral-800 hover:border-black dark:hover:border-white transition-all shadow-xs flex flex-col justify-between"
                 >
                   <div className="p-4">
@@ -69,7 +70,7 @@ export function CardView({ filteredRows }: CardViewProps) {
                         {primaryField && (
                           <input
                             type="text"
-                            value={titleVal ?? ''}
+                            value={titleVal !== undefined && titleVal !== null ? String(titleVal) : ''}
                             onChange={(e) =>
                               updateCell(activeTable.id, row.id, primaryField.id, e.target.value, true)
                             }
@@ -79,13 +80,22 @@ export function CardView({ filteredRows }: CardViewProps) {
                         )}
                       </div>
 
-                      <button
-                        onClick={() => deleteRow(activeTable.id, row.id)}
-                        className="opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-500 transition-opacity p-1"
-                        title="Delete card"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => duplicateRow(activeTable.id, row.id)}
+                          className="text-neutral-400 hover:text-black dark:hover:text-white p-1 cursor-pointer"
+                          title="Duplicate card"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => deleteRow(activeTable.id, row.id)}
+                          className="text-neutral-400 hover:text-red-500 p-1 cursor-pointer"
+                          title="Delete card"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Secondary Attributes */}
@@ -101,7 +111,7 @@ export function CardView({ filteredRows }: CardViewProps) {
                             {f.type === 'text' && (
                               <input
                                 type="text"
-                                value={val ?? ''}
+                                value={val !== undefined && val !== null ? String(val) : ''}
                                 onChange={(e) =>
                                   updateCell(activeTable.id, row.id, f.id, e.target.value, true)
                                 }
@@ -113,7 +123,7 @@ export function CardView({ filteredRows }: CardViewProps) {
                             {f.type === 'number' && (
                               <input
                                 type="number"
-                                value={val ?? ''}
+                                value={val !== undefined && val !== null ? String(val) : ''}
                                 onChange={(e) =>
                                   updateCell(
                                     activeTable.id,
@@ -128,13 +138,52 @@ export function CardView({ filteredRows }: CardViewProps) {
                               />
                             )}
 
+                            {f.type === 'date' && (
+                              <div className="flex items-center space-x-1.5">
+                                <Calendar className="w-3 h-3 text-neutral-400 shrink-0" />
+                                <input
+                                  type="date"
+                                  value={val !== undefined && val !== null ? String(val) : ''}
+                                  onChange={(e) =>
+                                    updateCell(activeTable.id, row.id, f.id, e.target.value, false)
+                                  }
+                                  className="w-full font-mono bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 px-2 py-0.5 outline-none text-xs"
+                                />
+                              </div>
+                            )}
+
+                            {f.type === 'url' && (
+                              <div className="flex items-center space-x-1">
+                                <input
+                                  type="url"
+                                  value={val !== undefined && val !== null ? String(val) : ''}
+                                  onChange={(e) =>
+                                    updateCell(activeTable.id, row.id, f.id, e.target.value, true)
+                                  }
+                                  placeholder="https://..."
+                                  className="flex-1 font-mono bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 px-2 py-1 outline-none text-xs"
+                                />
+                                {val && (
+                                  <a
+                                    href={String(val).startsWith('http') ? String(val) : `https://${String(val)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="p-1 text-neutral-400 hover:text-black dark:hover:text-white"
+                                    title="Open link"
+                                  >
+                                    <ExternalLink className="w-3 h-3" />
+                                  </a>
+                                )}
+                              </div>
+                            )}
+
                             {f.type === 'select' && (
                               <select
-                                value={val ?? ''}
+                                value={val !== undefined && val !== null ? String(val) : ''}
                                 onChange={(e) =>
                                   updateCell(activeTable.id, row.id, f.id, e.target.value, false)
                                 }
-                                className="w-full font-mono bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 px-2 py-1 outline-none text-xs"
+                                className="w-full font-mono bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 px-2 py-1 outline-none text-xs cursor-pointer"
                               >
                                 <option value="">— None —</option>
                                 {(f.options || []).map((opt) => (
@@ -145,6 +194,16 @@ export function CardView({ filteredRows }: CardViewProps) {
                               </select>
                             )}
 
+                            {f.type === 'multi_select' && (
+                              <MultiSelectCell
+                                field={f}
+                                value={val}
+                                onChange={(newTags) =>
+                                  updateCell(activeTable.id, row.id, f.id, newTags, false)
+                                }
+                              />
+                            )}
+
                             {f.type === 'checkbox' && (
                               <label className="flex items-center space-x-2 cursor-pointer pt-0.5">
                                 <input
@@ -153,7 +212,7 @@ export function CardView({ filteredRows }: CardViewProps) {
                                   onChange={(e) =>
                                     updateCell(activeTable.id, row.id, f.id, e.target.checked, false)
                                   }
-                                  className="w-4 h-4 rounded-none accent-black dark:accent-white"
+                                  className="w-4 h-4 rounded-none accent-black dark:accent-white cursor-pointer"
                                 />
                                 <span className="font-mono text-[11px] text-neutral-500">
                                   {val ? 'Enabled' : 'Disabled'}

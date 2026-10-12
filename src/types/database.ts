@@ -1,17 +1,19 @@
-export type FieldType = 'text' | 'number' | 'select' | 'checkbox' | 'relation';
+export type FieldType = 'text' | 'number' | 'select' | 'multi_select' | 'checkbox' | 'date' | 'url' | 'relation';
+
+export type CellValue = string | number | boolean | string[] | null | undefined;
 
 export interface Field {
   id: string; // e.g. "f1"
   name: string;
   type: FieldType;
-  options?: string[]; // for 'select'
+  options?: string[]; // for 'select' or 'multi_select'
   relationTableId?: string; // for 'relation': target table id
   relationDisplayFieldId?: string; // field to show as label
 }
 
 export interface RecordRow {
   id: string; // e.g. "r1"
-  [fieldId: string]: any; // for 'relation', stores target record ID
+  [fieldId: string]: CellValue; // stores cell value, tag array, or target record ID
 }
 
 export interface Table {

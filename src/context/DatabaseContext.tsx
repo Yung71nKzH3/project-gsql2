@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
-import { DatabaseState, Table, RecordRow, Field, ViewConfig, ViewType, WorkspaceMeta } from '../types/database';
+import { DatabaseState, Table, RecordRow, Field, ViewConfig, ViewType, WorkspaceMeta, CellValue } from '../types/database';
 import { serializeStateToHash, deserializeHashToState, deserializeHashWithVerification } from '../lib/codec';
 import {
   saveWorkspaceToIDB,
@@ -47,8 +47,11 @@ interface DatabaseContextValue {
   reorderFields: (tableId: string, sourceIndex: number, destIndex: number) => void;
   // Rows / Records
   addRow: (tableId: string, initialValues?: Partial<RecordRow>) => string;
-  updateCell: (tableId: string, rowId: string, fieldId: string, value: any, isDirectTyping?: boolean) => void;
+  updateCell: (tableId: string, rowId: string, fieldId: string, value: CellValue, isDirectTyping?: boolean) => void;
   deleteRow: (tableId: string, rowId: string) => void;
+  duplicateRow: (tableId: string, rowId: string) => string;
+  bulkDeleteRows: (tableId: string, rowIds: string[]) => void;
+  bulkDuplicateRows: (tableId: string, rowIds: string[]) => string[];
   // Collision modal handling
   collision: CollisionState;
   resolveCollision: (action: 'replace' | 'import' | 'discard') => void;
@@ -76,7 +79,9 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const [urlTruncationWarning, setUrlTruncationWarning] = useState<boolean>(false);
 
   const stateRef = useRef(state);
-  stateRef.current = state;
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasInitializedRef = useRef(false);
@@ -92,6 +97,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       setHistoryStack((prev) => [...prev.slice(-40), stateRef.current]);
       setFutureStack([]);
     }
+    stateRef.current = newState;
     setState(newState);
   }, []);
 
@@ -511,7 +517,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     return rowId;
   };
 
-  const updateCell = (tableId: string, rowId: string, fieldId: string, value: any, isDirectTyping = false) => {
+  const updateCell = (tableId: string, rowId: string, fieldId: string, value: CellValue, isDirectTyping = false) => {
     const next: DatabaseState = {
       ...stateRef.current,
       tables: stateRef.current.tables.map((t) => {
@@ -545,6 +551,86 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       updatedAt: Date.now(),
     };
     handleStructuralChange(next);
+  };
+
+  const duplicateRow = (tableId: string, rowId: string) => {
+    const table = stateRef.current.tables.find((t) => t.id === tableId);
+    if (!table) return '';
+    const original = table.rows.find((r) => r.id === rowId);
+    if (!original) return '';
+
+    const newId = `r_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const duplicated: RecordRow = {
+      ...original,
+      id: newId,
+    };
+
+    const originalIndex = table.rows.findIndex((r) => r.id === rowId);
+    const newRows = [...table.rows];
+    newRows.splice(originalIndex + 1, 0, duplicated);
+
+    const next: DatabaseState = {
+      ...stateRef.current,
+      tables: stateRef.current.tables.map((t) => {
+        if (t.id !== tableId) return t;
+        return {
+          ...t,
+          rows: newRows,
+        };
+      }),
+      updatedAt: Date.now(),
+    };
+    handleStructuralChange(next);
+    return newId;
+  };
+
+  const bulkDeleteRows = (tableId: string, rowIds: string[]) => {
+    const idSet = new Set(rowIds);
+    const next: DatabaseState = {
+      ...stateRef.current,
+      tables: stateRef.current.tables.map((t) => {
+        if (t.id !== tableId) return t;
+        return {
+          ...t,
+          rows: t.rows.filter((r) => !idSet.has(r.id)),
+        };
+      }),
+      updatedAt: Date.now(),
+    };
+    handleStructuralChange(next);
+  };
+
+  const bulkDuplicateRows = (tableId: string, rowIds: string[]) => {
+    const table = stateRef.current.tables.find((t) => t.id === tableId);
+    if (!table) return [];
+    const idSet = new Set(rowIds);
+    const duplicates: RecordRow[] = [];
+    const createdIds: string[] = [];
+
+    table.rows.forEach((r) => {
+      if (idSet.has(r.id)) {
+        const newId = `r_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        createdIds.push(newId);
+        duplicates.push({
+          ...r,
+          id: newId,
+        });
+      }
+    });
+
+    const next: DatabaseState = {
+      ...stateRef.current,
+      tables: stateRef.current.tables.map((t) => {
+        if (t.id !== tableId) return t;
+        return {
+          ...t,
+          rows: [...t.rows, ...duplicates],
+        };
+      }),
+      updatedAt: Date.now(),
+    };
+    handleStructuralChange(next);
+    return createdIds;
   };
 
   const resolveCollision = (action: 'replace' | 'import' | 'discard') => {
@@ -667,6 +753,9 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
         addRow,
         updateCell,
         deleteRow,
+        duplicateRow,
+        bulkDeleteRows,
+        bulkDuplicateRows,
         collision,
         resolveCollision,
         importState,

@@ -11,15 +11,17 @@ import {
   Upload,
   Sun,
   Moon,
-  Plus,
   RotateCcw,
   Check,
   Database as DbIcon,
   ChevronDown,
   Trash2,
   FilePlus,
-  FolderOpen,
+  HelpCircle,
+  BookOpen,
 } from 'lucide-react';
+import { DataExchangeModal } from './DataExchangeModal';
+import { createHelpDatabase } from '../lib/initialData';
 
 export function Header() {
   const {
@@ -29,8 +31,6 @@ export function Header() {
     canRedo,
     undo,
     redo,
-    addTable,
-    exportStateJson,
     importState,
     resetDatabase,
     urlByteLength,
@@ -45,13 +45,17 @@ export function Header() {
   const [copied, setCopied] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState(state.title);
+  const [prevTitle, setPrevTitle] = useState(state.title);
   const [showWorkspaceMenu, setShowWorkspaceMenu] = useState(false);
+  const [isExchangeModalOpen, setIsExchangeModalOpen] = useState(false);
+  const [exchangeDefaultTab, setExchangeDefaultTab] = useState<'import' | 'export'>('export');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Sync title value if external updates occur
-  React.useEffect(() => {
+  // Sync title value safely if external state changes (e.g. undo/redo)
+  if (state.title !== prevTitle) {
+    setPrevTitle(state.title);
     setTitleValue(state.title);
-  }, [state.title]);
+  }
 
   // Click outside to dismiss workspace dropdown
   useEffect(() => {
@@ -78,26 +82,6 @@ export function Header() {
     }
   };
 
-  const handleJsonUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const parsed = JSON.parse(event.target?.result as string);
-        if (parsed.version && Array.isArray(parsed.tables)) {
-          importState(parsed);
-        } else {
-          alert('Invalid UrlBase JSON file.');
-        }
-      } catch {
-        alert('Could not parse JSON file.');
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  };
-
   return (
     <header className="h-14 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-black px-4 flex items-center justify-between select-none relative z-40">
       {/* Left: Brand, Database Switcher Dropdown & Title */}
@@ -121,16 +105,29 @@ export function Header() {
                 <span className="font-mono text-[10px] uppercase text-neutral-400 font-bold tracking-wider">
                   Databases ({savedWorkspaces.length})
                 </span>
-                <button
-                  onClick={() => {
-                    createNewDatabase('New Database');
-                    setShowWorkspaceMenu(false);
-                  }}
-                  className="flex items-center space-x-1 text-[11px] font-mono px-2 py-0.5 border border-black dark:border-white bg-black dark:bg-white text-white dark:text-black font-semibold hover:bg-neutral-800 dark:hover:bg-neutral-200 cursor-pointer"
-                >
-                  <FilePlus className="w-3 h-3" />
-                  <span>NEW DB</span>
-                </button>
+                <div className="flex items-center space-x-1.5">
+                  <button
+                    onClick={() => {
+                      importState(createHelpDatabase());
+                      setShowWorkspaceMenu(false);
+                    }}
+                    className="flex items-center space-x-1 text-[11px] font-mono px-2 py-0.5 border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-900 cursor-pointer"
+                    title="Load interactive guide database"
+                  >
+                    <BookOpen className="w-3 h-3" />
+                    <span>GUIDE</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      createNewDatabase('New Database');
+                      setShowWorkspaceMenu(false);
+                    }}
+                    className="flex items-center space-x-1 text-[11px] font-mono px-2 py-0.5 border border-black dark:border-white bg-black dark:bg-white text-white dark:text-black font-semibold hover:bg-neutral-800 dark:hover:bg-neutral-200 cursor-pointer"
+                  >
+                    <FilePlus className="w-3 h-3" />
+                    <span>NEW DB</span>
+                  </button>
+                </div>
               </div>
 
               {/* List of saved databases */}
@@ -296,23 +293,42 @@ export function Header() {
           <span>NEW DB</span>
         </button>
 
-        {/* JSON Export */}
+        {/* Data Exchange Export */}
         <button
-          onClick={exportStateJson}
+          onClick={() => {
+            setExchangeDefaultTab('export');
+            setIsExchangeModalOpen(true);
+          }}
           className="p-1.5 border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors text-neutral-700 dark:text-neutral-300 cursor-pointer"
-          title="Export Database to JSON file"
+          title="Export Table or Workspace (CSV, TSV, JSON)"
         >
           <Download className="w-3.5 h-3.5" />
         </button>
 
-        {/* JSON Import */}
-        <label
+        {/* Data Exchange Import */}
+        <button
+          onClick={() => {
+            setExchangeDefaultTab('import');
+            setIsExchangeModalOpen(true);
+          }}
           className="p-1.5 border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors text-neutral-700 dark:text-neutral-300 cursor-pointer"
-          title="Import Database from JSON file"
+          title="Import CSV, TSV, or JSON File"
         >
           <Upload className="w-3.5 h-3.5" />
-          <input type="file" accept=".json" onChange={handleJsonUpload} className="hidden" />
-        </label>
+        </button>
+
+        {/* Interactive Guide & Tutorial */}
+        <button
+          onClick={() => {
+            if (confirm('Load UrlBase Interactive Tutorial & Guide?')) {
+              importState(createHelpDatabase());
+            }
+          }}
+          className="p-1.5 border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors text-neutral-700 dark:text-neutral-300 cursor-pointer"
+          title="Load Interactive Tutorial & Guide"
+        >
+          <HelpCircle className="w-3.5 h-3.5" />
+        </button>
 
         {/* Reset / Sample Database */}
         <button
@@ -336,6 +352,13 @@ export function Header() {
           {theme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
         </button>
       </div>
+
+      {/* Data Exchange Modal */}
+      <DataExchangeModal
+        isOpen={isExchangeModalOpen}
+        onClose={() => setIsExchangeModalOpen(false)}
+        defaultTab={exchangeDefaultTab}
+      />
     </header>
   );
 }

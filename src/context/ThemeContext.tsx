@@ -12,12 +12,20 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | null>(null);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>('light');
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('urlbase_theme') as Theme | null;
+        if (saved === 'dark' || saved === 'light') return saved;
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+      } catch {}
+    }
+    return 'light';
+  });
 
-  const applyTheme = (targetTheme: Theme) => {
-    setTheme(targetTheme);
+  useEffect(() => {
     const root = document.documentElement;
-    if (targetTheme === 'dark') {
+    if (theme === 'dark') {
       root.classList.add('dark');
       root.setAttribute('data-theme', 'dark');
       root.style.colorScheme = 'dark';
@@ -26,24 +34,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       root.setAttribute('data-theme', 'light');
       root.style.colorScheme = 'light';
     }
-  };
-
-  useEffect(() => {
-    // Check saved or system preference
-    const saved = localStorage.getItem('urlbase_theme') as Theme | null;
-    if (saved === 'dark' || saved === 'light') {
-      applyTheme(saved);
-    } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      applyTheme('dark');
-    } else {
-      applyTheme('light');
-    }
-  }, []);
+  }, [theme]);
 
   const toggleTheme = () => {
     const next = theme === 'light' ? 'dark' : 'light';
-    applyTheme(next);
-    localStorage.setItem('urlbase_theme', next);
+    setTheme(next);
+    try {
+      localStorage.setItem('urlbase_theme', next);
+    } catch {}
   };
 
   return (

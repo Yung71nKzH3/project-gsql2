@@ -2,12 +2,12 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useDatabase } from '../context/DatabaseContext';
-import { Field, RecordRow } from '../types/database';
+import { Field, CellValue } from '../types/database';
 import { Link2, Search, X, Check, AlertTriangle } from 'lucide-react';
 
 interface RelationCellProps {
   field: Field;
-  value: any; // ID of referenced row
+  value: CellValue; // ID of referenced row
   onChange: (newRowId: string | null) => void;
   readOnly?: boolean;
 }

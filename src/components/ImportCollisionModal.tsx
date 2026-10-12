@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useDatabase } from '../context/DatabaseContext';
-import { AlertCircle, ArrowRight, Download, X } from 'lucide-react';
+import { AlertCircle, ArrowRight, X } from 'lucide-react';
 
 export function ImportCollisionModal() {
   const { collision, resolveCollision } = useDatabase();
@@ -22,7 +22,7 @@ export function ImportCollisionModal() {
             </h3>
             <p className="text-xs text-neutral-600 dark:text-neutral-400 mt-1">
               You are opening a shared link with workspace{' '}
-              <strong className="text-black dark:text-white">"{incoming.title}"</strong> ({incoming.tables.length} tables),
+              <strong className="text-black dark:text-white">&ldquo;{incoming.title}&rdquo;</strong> ({incoming.tables.length} tables),
               but an existing local workspace is already active on this device.
             </p>
           </div>

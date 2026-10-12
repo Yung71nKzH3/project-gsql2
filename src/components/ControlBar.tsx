@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { useDatabase } from '../context/DatabaseContext';
 import { Search, Plus, Filter, ArrowUpDown } from 'lucide-react';
 

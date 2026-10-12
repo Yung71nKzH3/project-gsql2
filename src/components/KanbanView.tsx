@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { useDatabase } from '../context/DatabaseContext';
-import { RecordRow, Field } from '../types/database';
+import { RecordRow, CellValue } from '../types/database';
 import { RelationCell } from './RelationCell';
-import { Plus, Trash2, Settings, MoveRight, MoveLeft, GripVertical } from 'lucide-react';
+import { MultiSelectCell } from './MultiSelectCell';
+import { Plus, Trash2, Copy, MoveRight, MoveLeft, GripVertical } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface KanbanViewProps {
@@ -20,6 +21,7 @@ export function KanbanView({ filteredRows }: KanbanViewProps) {
     addRow,
     updateCell,
     deleteRow,
+    duplicateRow,
   } = useDatabase();
 
   // Pick group by field (select or relation or default to first select)
@@ -33,7 +35,7 @@ export function KanbanView({ filteredRows }: KanbanViewProps) {
   const groupByField = activeTable.fields.find((f) => f.id === activeGroupByFieldId);
 
   // Derive columns
-  let columns: { id: string; label: string; rawValue: any }[] = [];
+  let columns: { id: string; label: string; rawValue: CellValue }[] = [];
 
   if (groupByField?.type === 'select' && groupByField.options) {
     columns = [
@@ -83,7 +85,7 @@ export function KanbanView({ filteredRows }: KanbanViewProps) {
     e.dataTransfer.dropEffect = 'move';
   };
 
-  const handleDrop = (e: React.DragEvent, targetColumnRawValue: any) => {
+  const handleDrop = (e: React.DragEvent, targetColumnRawValue: CellValue) => {
     e.preventDefault();
     const rowId = e.dataTransfer.getData('text/plain');
     if (rowId && groupByField) {
@@ -91,7 +93,7 @@ export function KanbanView({ filteredRows }: KanbanViewProps) {
     }
   };
 
-  const handleAddInColumn = (rawValue: any) => {
+  const handleAddInColumn = (rawValue: CellValue) => {
     if (groupByField) {
       addRow(activeTable.id, {
         [groupByField.id]: rawValue,
@@ -180,7 +182,7 @@ export function KanbanView({ filteredRows }: KanbanViewProps) {
                     <motion.div
                       key={row.id}
                       draggable
-                      onDragStart={(e) => handleDragStart(e as any, row.id)}
+                      onDragStart={(e) => handleDragStart(e as unknown as React.DragEvent, row.id)}
                       className="group bg-white dark:bg-black border border-neutral-200 dark:border-neutral-800 hover:border-black dark:hover:border-white p-3 cursor-grab active:cursor-grabbing shadow-xs transition-colors"
                     >
                       <div className="flex items-start justify-between">
@@ -191,13 +193,22 @@ export function KanbanView({ filteredRows }: KanbanViewProps) {
                           </span>
                         </div>
 
-                        <button
-                          onClick={() => deleteRow(activeTable.id, row.id)}
-                          className="opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-500 p-0.5"
-                          title="Delete card"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
+                        <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => duplicateRow(activeTable.id, row.id)}
+                            className="text-neutral-400 hover:text-black dark:hover:text-white p-0.5 cursor-pointer"
+                            title="Duplicate card"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => deleteRow(activeTable.id, row.id)}
+                            className="text-neutral-400 hover:text-red-500 p-0.5 cursor-pointer"
+                            title="Delete card"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
                       </div>
 
                       {/* Display other fields as subtle chips */}
@@ -218,6 +229,19 @@ export function KanbanView({ filteredRows }: KanbanViewProps) {
                                       updateCell(activeTable.id, row.id, f.id, newId, false)
                                     }
                                     readOnly={true}
+                                  />
+                                </div>
+                              );
+                            }
+
+                            if (f.type === 'multi_select') {
+                              return (
+                                <div key={f.id} className="text-[10px]">
+                                  <MultiSelectCell
+                                    field={f}
+                                    value={val}
+                                    readOnly={true}
+                                    onChange={() => {}}
                                   />
                                 </div>
                               );

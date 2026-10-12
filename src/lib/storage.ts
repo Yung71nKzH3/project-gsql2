@@ -47,7 +47,7 @@ export async function saveWorkspaceToIDB(state: DatabaseState): Promise<void> {
       };
       req.onerror = () => reject(req.error);
     });
-  } catch (err) {
+  } catch {
     try {
       localStorage.setItem(`urlbase_ws_${wsId}`, JSON.stringify(stateWithMeta));
       localStorage.setItem(ACTIVE_KEY, wsId);
@@ -126,7 +126,7 @@ export async function deleteWorkspaceFromIDB(workspaceId: string): Promise<void>
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
-  } catch (err) {
+  } catch {
     try {
       localStorage.removeItem(`urlbase_ws_${workspaceId}`);
     } catch {}

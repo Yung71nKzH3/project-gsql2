@@ -57,7 +57,7 @@ export async function serializeStateToHash(state: DatabaseState): Promise<string
     const base64url = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const checksum = computeChecksum(base64url);
     return `data=u:${base64url}.k:${checksum}`;
-  } catch (e) {
+  } catch {
     const raw = encodeURIComponent(jsonStr);
     const checksum = computeChecksum(raw);
     return `data=raw:${raw}.k:${checksum}`;

@@ -4,14 +4,15 @@ import React from 'react';
 import { useDatabase } from '../context/DatabaseContext';
 import { RecordRow } from '../types/database';
 import { RelationCell } from './RelationCell';
-import { Plus, Trash2, CheckCircle2, Circle } from 'lucide-react';
+import { MultiSelectCell } from './MultiSelectCell';
+import { Plus, Trash2, Copy, CheckCircle2, Circle, Calendar, ExternalLink } from 'lucide-react';
 
 interface ListViewProps {
   filteredRows: RecordRow[];
 }
 
 export function ListView({ filteredRows }: ListViewProps) {
-  const { activeTable, addRow, updateCell, deleteRow } = useDatabase();
+  const { activeTable, addRow, updateCell, deleteRow, duplicateRow } = useDatabase();
 
   const primaryField = activeTable.fields.find((f) => f.type === 'text') || activeTable.fields[0];
   const checkboxField = activeTable.fields.find((f) => f.type === 'checkbox');
@@ -26,7 +27,7 @@ export function ListView({ filteredRows }: ListViewProps) {
         <span className="font-mono text-neutral-400 uppercase text-[11px]">Roster / Checklist Layout</span>
         <button
           onClick={() => addRow(activeTable.id)}
-          className="flex items-center space-x-1 font-mono text-xs border border-neutral-300 dark:border-neutral-700 px-2.5 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors"
+          className="flex items-center space-x-1 font-mono text-xs border border-neutral-300 dark:border-neutral-700 px-2.5 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors cursor-pointer"
         >
           <Plus className="w-3 h-3" />
           <span>New Item</span>
@@ -34,7 +35,7 @@ export function ListView({ filteredRows }: ListViewProps) {
       </div>
 
       {/* Roster Items */}
-      <div className="flex-1 overflow-y-auto divide-y divide-neutral-200 dark:divide-neutral-800">
+      <div className="flex-1 overflow-y-auto divide-y divide-neutral-200 dark:border-neutral-800">
         {filteredRows.length === 0 ? (
           <div className="p-12 text-center text-xs font-mono text-neutral-400">
             No records in this list view.
@@ -56,7 +57,7 @@ export function ListView({ filteredRows }: ListViewProps) {
                       onClick={() =>
                         updateCell(activeTable.id, row.id, checkboxField.id, !isChecked, false)
                       }
-                      className="text-neutral-400 hover:text-black dark:hover:text-white"
+                      className="text-neutral-400 hover:text-black dark:hover:text-white cursor-pointer"
                     >
                       {isChecked ? (
                         <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -82,8 +83,8 @@ export function ListView({ filteredRows }: ListViewProps) {
                 </div>
 
                 {/* Right: Metadata attributes and actions */}
-                <div className="flex items-center space-x-4">
-                  <div className="hidden sm:flex items-center space-x-3">
+                <div className="flex items-center space-x-3">
+                  <div className="hidden sm:flex items-center space-x-2">
                     {otherFields.map((f) => {
                       const val = row[f.id];
                       if (val === undefined || val === null || val === '') return null;
@@ -94,11 +95,54 @@ export function ListView({ filteredRows }: ListViewProps) {
                             <RelationCell
                               field={f}
                               value={val}
+                              readOnly
                               onChange={(newId) =>
                                 updateCell(activeTable.id, row.id, f.id, newId, false)
                               }
                             />
                           </div>
+                        );
+                      }
+
+                      if (f.type === 'multi_select') {
+                        return (
+                          <div key={f.id} className="text-xs">
+                            <MultiSelectCell
+                              field={f}
+                              value={val}
+                              readOnly
+                              onChange={(newTags) =>
+                                updateCell(activeTable.id, row.id, f.id, newTags, false)
+                              }
+                            />
+                          </div>
+                        );
+                      }
+
+                      if (f.type === 'date') {
+                        return (
+                          <span
+                            key={f.id}
+                            className="inline-flex items-center space-x-1 font-mono text-xs px-2 py-0.5 border border-neutral-200 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400"
+                          >
+                            <Calendar className="w-2.5 h-2.5 text-neutral-400" />
+                            <span>{String(val)}</span>
+                          </span>
+                        );
+                      }
+
+                      if (f.type === 'url') {
+                        return (
+                          <a
+                            key={f.id}
+                            href={String(val).startsWith('http') ? String(val) : `https://${String(val)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center space-x-1 font-mono text-xs px-2 py-0.5 border border-neutral-200 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-900 text-blue-600 dark:text-blue-400 hover:underline"
+                          >
+                            <span className="truncate max-w-[120px]">{String(val)}</span>
+                            <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
                         );
                       }
 
@@ -113,13 +157,23 @@ export function ListView({ filteredRows }: ListViewProps) {
                     })}
                   </div>
 
-                  <button
-                    onClick={() => deleteRow(activeTable.id, row.id)}
-                    className="opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-500 transition-opacity p-1"
-                    title="Delete item"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {/* Actions: Duplicate & Delete */}
+                  <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => duplicateRow(activeTable.id, row.id)}
+                      className="text-neutral-400 hover:text-black dark:hover:text-white p-1 cursor-pointer"
+                      title="Duplicate item"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => deleteRow(activeTable.id, row.id)}
+                      className="text-neutral-400 hover:text-red-500 p-1 cursor-pointer"
+                      title="Delete item"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -131,7 +185,7 @@ export function ListView({ filteredRows }: ListViewProps) {
       <div className="border-t border-neutral-200 dark:border-neutral-800 px-6 py-2 bg-neutral-50/50 dark:bg-neutral-950/50 flex items-center justify-between select-none">
         <button
           onClick={() => addRow(activeTable.id)}
-          className="flex items-center space-x-1.5 text-xs font-mono text-neutral-600 dark:text-neutral-400 hover:text-black dark:hover:text-white transition-colors"
+          className="flex items-center space-x-1.5 text-xs font-mono text-neutral-600 dark:text-neutral-400 hover:text-black dark:hover:text-white transition-colors cursor-pointer"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>Add item</span>

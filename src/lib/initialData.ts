@@ -243,3 +243,105 @@ export function createBlankDatabase(title = 'New Database'): DatabaseState {
     updatedAt: Date.now(),
   };
 }
+
+export function createHelpDatabase(): DatabaseState {
+  return {
+    version: 1,
+    id: 'ws_urlbase_guide',
+    title: 'UrlBase Tutorial & Guide',
+    tables: [
+      {
+        id: 't_guide',
+        name: 'Features & Guide',
+        fields: [
+          { id: 'f_topic', name: 'Feature / Topic', type: 'text' },
+          {
+            id: 'f_category',
+            name: 'Category',
+            type: 'select',
+            options: ['Core Architecture', 'Data Types', 'Portability', 'Table Links', 'Productivity'],
+          },
+          {
+            id: 'f_tags',
+            name: 'Capabilities',
+            type: 'multi_select',
+            options: ['Zero-Backend', 'Offline-First', 'Compression', 'Keyboard', 'CSV', 'Formulas'],
+          },
+          { id: 'f_doc_url', name: 'Reference Link', type: 'url' },
+          { id: 'f_completed', name: 'Learned', type: 'checkbox' },
+        ],
+        rows: [
+          {
+            id: 'r_g1',
+            f_topic: 'Zero-Backend URL Compression',
+            f_category: 'Core Architecture',
+            f_tags: ['Zero-Backend', 'Compression'],
+            f_doc_url: 'https://github.com',
+            f_completed: true,
+          },
+          {
+            id: 'r_g2',
+            f_topic: 'Rich Data Types (Date, Tags, URL)',
+            f_category: 'Data Types',
+            f_tags: ['Zero-Backend', 'Offline-First'],
+            f_doc_url: 'https://developer.mozilla.org',
+            f_completed: true,
+          },
+          {
+            id: 'r_g3',
+            f_topic: 'Link Records Across Tables',
+            f_category: 'Table Links',
+            f_tags: ['Offline-First'],
+            f_doc_url: '',
+            f_completed: false,
+          },
+          {
+            id: 'r_g4',
+            f_topic: 'CSV & TSV Import / Export with Live Preview',
+            f_category: 'Portability',
+            f_tags: ['CSV', 'Import/Export'],
+            f_doc_url: '',
+            f_completed: false,
+          },
+          {
+            id: 'r_g5',
+            f_topic: 'Google Sheets-Style Range Selection & Footer Aggregations',
+            f_category: 'Productivity',
+            f_tags: ['Keyboard', 'Formulas'],
+            f_doc_url: '',
+            f_completed: false,
+          },
+        ],
+      },
+    ],
+    views: [
+      {
+        id: 'v_guide_table',
+        tableId: 't_guide',
+        name: 'Guide Grid',
+        type: 'table',
+      },
+      {
+        id: 'v_guide_kanban',
+        tableId: 't_guide',
+        name: 'Roadmap Board',
+        type: 'kanban',
+        groupByFieldId: 'f_category',
+      },
+      {
+        id: 'v_guide_cards',
+        tableId: 't_guide',
+        name: 'Topic Cards',
+        type: 'card',
+      },
+      {
+        id: 'v_guide_checklist',
+        tableId: 't_guide',
+        name: 'Mastery Checklist',
+        type: 'list',
+      },
+    ],
+    activeViewId: 'v_guide_table',
+    updatedAt: Date.now(),
+  };
+}

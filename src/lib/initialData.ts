@@ -2,6 +2,7 @@ import { DatabaseState } from '../types/database';
 
 export const initialDatabaseState: DatabaseState = {
   version: 1,
+  id: 'ws_default_nexus',
   title: 'Workspace Nexus',
   tables: [
     {
@@ -207,3 +208,38 @@ export const initialDatabaseState: DatabaseState = {
   ],
   activeViewId: 'v_projects_table',
 };
+
+export function createBlankDatabase(title = 'New Database'): DatabaseState {
+  const tableId = `t_${Date.now()}`;
+  const viewId = `v_${Date.now()}`;
+  const wsId = `ws_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+
+  return {
+    version: 1,
+    id: wsId,
+    title,
+    tables: [
+      {
+        id: tableId,
+        name: 'Table 1',
+        fields: [
+          { id: `f_name_${Date.now()}`, name: 'Name', type: 'text' },
+          { id: `f_notes_${Date.now()}`, name: 'Notes', type: 'text' },
+        ],
+        rows: [
+          { id: `r_1_${Date.now()}` },
+        ],
+      },
+    ],
+    views: [
+      {
+        id: viewId,
+        tableId: tableId,
+        name: 'Grid View',
+        type: 'table',
+      },
+    ],
+    activeViewId: viewId,
+    updatedAt: Date.now(),
+  };
+}

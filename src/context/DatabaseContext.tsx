@@ -1,10 +1,15 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
-import { DatabaseState, Table, RecordRow, Field, ViewConfig, ViewType } from '../types/database';
-import { serializeStateToHash, deserializeHashToState } from '../lib/codec';
-import { saveWorkspaceToIDB, loadWorkspaceFromIDB } from '../lib/storage';
-import { initialDatabaseState } from '../lib/initialData';
+import { DatabaseState, Table, RecordRow, Field, ViewConfig, ViewType, WorkspaceMeta } from '../types/database';
+import { serializeStateToHash, deserializeHashToState, deserializeHashWithVerification } from '../lib/codec';
+import {
+  saveWorkspaceToIDB,
+  loadWorkspaceFromIDB,
+  listWorkspacesFromIDB,
+  deleteWorkspaceFromIDB,
+} from '../lib/storage';
+import { initialDatabaseState, createBlankDatabase } from '../lib/initialData';
 
 interface CollisionState {
   isOpen: boolean;
@@ -20,6 +25,12 @@ interface DatabaseContextValue {
   undo: () => void;
   redo: () => void;
   updateTitle: (title: string) => void;
+  // Multi-workspace management
+  savedWorkspaces: WorkspaceMeta[];
+  refreshSavedWorkspaces: () => Promise<void>;
+  createNewDatabase: (title?: string) => void;
+  switchWorkspace: (workspaceId: string) => Promise<void>;
+  deleteStoredWorkspace: (workspaceId: string) => Promise<void>;
   // Tables
   addTable: (name?: string) => void;
   deleteTable: (tableId: string) => void;
@@ -45,26 +56,35 @@ interface DatabaseContextValue {
   importState: (incoming: DatabaseState) => void;
   exportStateJson: () => void;
   resetDatabase: () => void;
-  // Url sharing stats
+  // Url sharing stats & validation
   urlByteLength: number;
   isHydrated: boolean;
+  urlTruncationWarning: boolean;
+  dismissTruncationWarning: () => void;
 }
 
 const DatabaseContext = createContext<DatabaseContextValue | null>(null);
 
 export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<DatabaseState>(initialDatabaseState);
+  const [savedWorkspaces, setSavedWorkspaces] = useState<WorkspaceMeta[]>([]);
   const [historyStack, setHistoryStack] = useState<DatabaseState[]>([]);
   const [futureStack, setFutureStack] = useState<DatabaseState[]>([]);
   const [collision, setCollision] = useState<CollisionState>({ isOpen: false, incomingState: null });
   const [urlByteLength, setUrlByteLength] = useState<number>(0);
   const [isHydrated, setIsHydrated] = useState<boolean>(false);
+  const [urlTruncationWarning, setUrlTruncationWarning] = useState<boolean>(false);
 
   const stateRef = useRef(state);
   stateRef.current = state;
 
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasInitializedRef = useRef(false);
+
+  const refreshSavedWorkspaces = useCallback(async () => {
+    const list = await listWorkspacesFromIDB();
+    setSavedWorkspaces(list);
+  }, []);
 
   // Helper to commit state with undo stack
   const commitState = useCallback((newState: DatabaseState, pushToHistory = true) => {
@@ -76,24 +96,28 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Update URL hash and persist to storage
-  const syncToUrlAndStorage = useCallback(async (currentState: DatabaseState, isStructural = false) => {
-    try {
-      const hashStr = await serializeStateToHash(currentState);
-      setUrlByteLength(hashStr.length);
-      saveWorkspaceToIDB(currentState);
+  const syncToUrlAndStorage = useCallback(
+    async (currentState: DatabaseState, isStructural = false) => {
+      try {
+        const hashStr = await serializeStateToHash(currentState);
+        setUrlByteLength(hashStr.length);
+        await saveWorkspaceToIDB(currentState);
+        refreshSavedWorkspaces();
 
-      if (typeof window !== 'undefined') {
-        const fullHash = `#${hashStr}`;
-        if (isStructural) {
-          window.history.pushState(null, '', fullHash);
-        } else {
-          window.history.replaceState(null, '', fullHash);
+        if (typeof window !== 'undefined') {
+          const fullHash = `#${hashStr}`;
+          if (isStructural) {
+            window.history.pushState(null, '', fullHash);
+          } else {
+            window.history.replaceState(null, '', fullHash);
+          }
         }
+      } catch (e) {
+        console.error('Error syncing state:', e);
       }
-    } catch (e) {
-      console.error('Error syncing state:', e);
-    }
-  }, []);
+    },
+    [refreshSavedWorkspaces]
+  );
 
   // Structural edits trigger pushState immediately
   const handleStructuralChange = useCallback(
@@ -139,28 +163,39 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       const localState = await loadWorkspaceFromIDB();
 
       if (currentHash && currentHash.includes('data=')) {
-        const sharedState = await deserializeHashToState(currentHash);
+        const verification = await deserializeHashWithVerification(currentHash);
+        if (verification.isTruncated && !verification.state) {
+          setUrlTruncationWarning(true);
+        }
+
+        const sharedState = verification.state;
         if (sharedState) {
-          if (localState && JSON.stringify(localState.tables) !== JSON.stringify(sharedState.tables)) {
-            // Collision between existing local workspace and shared link
+          if (
+            localState &&
+            localState.id !== sharedState.id &&
+            JSON.stringify(localState.tables) !== JSON.stringify(sharedState.tables)
+          ) {
+            // Collision between existing local workspace and incoming shared link
             setCollision({
               isOpen: true,
               incomingState: sharedState,
             });
             setState(localState);
             serializeStateToHash(localState).then((h) => setUrlByteLength(h.length));
+            await refreshSavedWorkspaces();
             return;
           } else {
-            // No local conflict, load shared state directly
+            // Load shared state directly
             setState(sharedState);
-            saveWorkspaceToIDB(sharedState);
+            await saveWorkspaceToIDB(sharedState);
             serializeStateToHash(sharedState).then((h) => setUrlByteLength(h.length));
+            await refreshSavedWorkspaces();
             return;
           }
         }
       }
 
-      // No hash or shared state failed; fallback to local or initial
+      // No hash: load last saved workspace from IDB, or seed default
       if (localState) {
         setState(localState);
         serializeStateToHash(localState).then((h) => {
@@ -177,8 +212,10 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
             window.history.replaceState(null, '', `#${h}`);
           }
         });
-        saveWorkspaceToIDB(initialDatabaseState);
+        await saveWorkspaceToIDB(initialDatabaseState);
       }
+
+      await refreshSavedWorkspaces();
     }
 
     init().finally(() => {
@@ -198,7 +235,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+  }, [refreshSavedWorkspaces]);
 
   // Undo / Redo
   const undo = useCallback(() => {
@@ -241,9 +278,40 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [undo, redo]);
 
+  // Multi-workspace operations
+  const createNewDatabase = (title = 'Untitled Database') => {
+    const blank = createBlankDatabase(title);
+    setHistoryStack([]);
+    setFutureStack([]);
+    handleStructuralChange(blank);
+  };
+
+  const switchWorkspace = async (workspaceId: string) => {
+    const target = await loadWorkspaceFromIDB(workspaceId);
+    if (target) {
+      setHistoryStack([]);
+      setFutureStack([]);
+      handleStructuralChange(target);
+    }
+  };
+
+  const deleteStoredWorkspace = async (workspaceId: string) => {
+    await deleteWorkspaceFromIDB(workspaceId);
+    await refreshSavedWorkspaces();
+    // If deleted currently active, switch to another or blank
+    if (stateRef.current.id === workspaceId) {
+      const remaining = savedWorkspaces.filter((w) => w.id !== workspaceId);
+      if (remaining.length > 0) {
+        await switchWorkspace(remaining[0].id);
+      } else {
+        createNewDatabase();
+      }
+    }
+  };
+
   // Actions
   const updateTitle = (title: string) => {
-    const next = { ...stateRef.current, title };
+    const next = { ...stateRef.current, title, updatedAt: Date.now() };
     handleCellTypingChange(next, true);
   };
 
@@ -256,9 +324,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
         { id: `f_name_${Date.now()}`, name: 'Name', type: 'text' },
         { id: `f_notes_${Date.now()}`, name: 'Notes', type: 'text' },
       ],
-      rows: [
-        { id: `r_1_${Date.now()}` },
-      ],
+      rows: [{ id: `r_1_${Date.now()}` }],
     };
 
     const newView: ViewConfig = {
@@ -273,6 +339,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       tables: [...stateRef.current.tables, newTable],
       views: [...stateRef.current.views, newView],
       activeViewId: newView.id,
+      updatedAt: Date.now(),
     };
     handleStructuralChange(next);
   };
@@ -289,6 +356,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       tables: remainingTables,
       views: remainingViews,
       activeViewId: nextActiveViewId,
+      updatedAt: Date.now(),
     };
     handleStructuralChange(next);
   };
@@ -297,6 +365,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     const next: DatabaseState = {
       ...stateRef.current,
       tables: stateRef.current.tables.map((t) => (t.id === tableId ? { ...t, name } : t)),
+      updatedAt: Date.now(),
     };
     handleStructuralChange(next);
   };
@@ -310,7 +379,6 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     const targetTable = stateRef.current.tables.find((t) => t.id === tableId);
     const viewName = name || `${targetTable?.name || 'Table'} ${type.charAt(0).toUpperCase() + type.slice(1)}`;
 
-    // If kanban or card, default groupByFieldId to first select or relation field if available
     let groupByFieldId: string | undefined = undefined;
     if (type === 'kanban' || type === 'card') {
       const selectField = targetTable?.fields.find((f) => f.type === 'select' || f.type === 'relation');
@@ -331,6 +399,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       ...stateRef.current,
       views: [...stateRef.current.views, newView],
       activeViewId: viewId,
+      updatedAt: Date.now(),
     };
     handleStructuralChange(next);
   };
@@ -343,6 +412,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
       ...stateRef.current,
       views: remainingViews,
       activeViewId: nextActive,
+      updatedAt: Date.now(),
     };
     handleStructuralChange(next);
   };
@@ -351,6 +421,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     const next: DatabaseState = {
       ...stateRef.current,
       views: stateRef.current.views.map((v) => (v.id === viewId ? { ...v, ...updates } : v)),
+      updatedAt: Date.now(),
     };
     handleStructuralChange(next);
   };
@@ -367,6 +438,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
           fields: [...t.fields, newField],
         };
       }),
+      updatedAt: Date.now(),
     };
     handleStructuralChange(next);
   };
@@ -381,6 +453,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
           fields: t.fields.map((f) => (f.id === fieldId ? { ...f, ...updates } : f)),
         };
       }),
+      updatedAt: Date.now(),
     };
     handleStructuralChange(next);
   };
@@ -400,6 +473,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
           }),
         };
       }),
+      updatedAt: Date.now(),
     };
     handleStructuralChange(next);
   };
@@ -414,6 +488,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     const next: DatabaseState = {
       ...stateRef.current,
       tables: stateRef.current.tables.map((t) => (t.id === tableId ? { ...t, fields: newFields } : t)),
+      updatedAt: Date.now(),
     };
     handleStructuralChange(next);
   };
@@ -430,6 +505,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
           rows: [...t.rows, newRow],
         };
       }),
+      updatedAt: Date.now(),
     };
     handleStructuralChange(next);
     return rowId;
@@ -451,6 +527,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
           }),
         };
       }),
+      updatedAt: Date.now(),
     };
     handleCellTypingChange(next, isDirectTyping);
   };
@@ -465,6 +542,7 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
           rows: t.rows.filter((r) => r.id !== rowId),
         };
       }),
+      updatedAt: Date.now(),
     };
     handleStructuralChange(next);
   };
@@ -482,7 +560,6 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
     } else if (action === 'import') {
       const current = stateRef.current;
       const incoming = collision.incomingState;
-      // Append incoming tables and views with unique IDs if collision exists
       const mergedTables = [...current.tables];
       const mergedViews = [...current.views];
 
@@ -509,18 +586,22 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
         ...current,
         tables: mergedTables,
         views: mergedViews,
+        updatedAt: Date.now(),
       };
       handleStructuralChange(next);
       setCollision({ isOpen: false, incomingState: null });
     } else {
-      // Discard shared and keep existing local workspace
       setCollision({ isOpen: false, incomingState: null });
       syncToUrlAndStorage(stateRef.current, true);
     }
   };
 
   const importState = (incoming: DatabaseState) => {
-    handleStructuralChange(incoming);
+    handleStructuralChange({
+      ...incoming,
+      id: incoming.id || `ws_imp_${Date.now()}`,
+      updatedAt: Date.now(),
+    });
   };
 
   const exportStateJson = () => {
@@ -567,6 +648,11 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
         undo,
         redo,
         updateTitle,
+        savedWorkspaces,
+        refreshSavedWorkspaces,
+        createNewDatabase,
+        switchWorkspace,
+        deleteStoredWorkspace,
         addTable,
         deleteTable,
         renameTable,
@@ -588,6 +674,8 @@ export function DatabaseProvider({ children }: { children: React.ReactNode }) {
         resetDatabase,
         urlByteLength,
         isHydrated,
+        urlTruncationWarning,
+        dismissTruncationWarning: () => setUrlTruncationWarning(false),
       }}
     >
       {children}

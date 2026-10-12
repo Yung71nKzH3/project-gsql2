@@ -33,8 +33,18 @@ export interface ViewConfig {
 
 export interface DatabaseState {
   version: 1;
+  id?: string; // unique workspace identifier e.g. "ws_123456"
   title: string;
   tables: Table[];
   views: ViewConfig[];
   activeViewId: string;
+  updatedAt?: number;
+}
+
+export interface WorkspaceMeta {
+  id: string;
+  title: string;
+  tableCount: number;
+  rowCount: number;
+  updatedAt: number;
 }

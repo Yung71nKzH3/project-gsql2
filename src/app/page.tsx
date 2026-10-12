@@ -13,7 +13,7 @@ import { ListView } from '../components/ListView';
 import { ImportCollisionModal } from '../components/ImportCollisionModal';
 
 function MainApp() {
-  const { activeTable, activeView } = useDatabase();
+  const { activeTable, activeView, urlTruncationWarning, dismissTruncationWarning } = useDatabase();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilterFieldId, setSelectedFilterFieldId] = useState('all');
@@ -91,6 +91,22 @@ function MainApp() {
         sortAsc={sortAsc}
         onToggleSortOrder={() => setSortAsc((prev) => !prev)}
       />
+      {urlTruncationWarning && (
+        <div className="bg-amber-500 text-black px-4 py-2 text-xs font-mono font-medium flex items-center justify-between z-30 shadow-xs border-b border-amber-600">
+          <div className="flex items-center space-x-2">
+            <span>⚠️</span>
+            <span>
+              <strong>URL Truncation Detected:</strong> The shared URL appears to have been cut off or modified in transit (checksum verification failed). Loaded your local workspace safely instead.
+            </span>
+          </div>
+          <button
+            onClick={dismissTruncationWarning}
+            className="underline ml-4 cursor-pointer hover:font-bold"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
       <main className="flex-1 flex flex-col overflow-hidden relative">
         {renderActiveView()}
       </main>

@@ -40,7 +40,7 @@ export function Header() {
     switchWorkspace,
     deleteStoredWorkspace,
   } = useDatabase();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, mounted, toggleTheme } = useTheme();
 
   const [copied, setCopied] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -145,7 +145,7 @@ export function Header() {
                         className={`group flex items-center justify-between p-2 transition-colors border ${
                           isCurrent
                             ? 'bg-neutral-100 dark:bg-neutral-900 border-neutral-400 dark:border-neutral-600 font-semibold'
-                            : 'border-transparent hover:bg-neutral-50 dark:hover:bg-neutral-950 hover:border-neutral-200 dark:hover:border-neutral-800'
+                            : 'border-transparent hover:bg-neutral-50 dark:hover:bg-neutral-950 hover:border-neutral-200 dark:border-neutral-800'
                         }`}
                       >
                         <button
@@ -348,8 +348,17 @@ export function Header() {
           onClick={toggleTheme}
           className="p-1.5 border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors text-neutral-700 dark:text-neutral-300 cursor-pointer"
           title="Toggle Light / Dark Mode"
+          aria-label="Toggle Light / Dark Mode"
         >
-          {theme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+          {mounted ? (
+            theme === 'dark' ? (
+              <Sun className="w-3.5 h-3.5" />
+            ) : (
+              <Moon className="w-3.5 h-3.5" />
+            )
+          ) : (
+            <span className="w-3.5 h-3.5 block" />
+          )}
         </button>
       </div>
 
